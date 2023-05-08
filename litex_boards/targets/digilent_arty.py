@@ -30,6 +30,8 @@ from litedram.modules import MT41K128M16
 from litedram.phy import s7ddrphy
 
 from liteeth.phy.mii import LiteEthPHYMII
+from litex.build.generic_platform import Subsignal, Pins, IOStandard
+from ctucan import CTUCAN, CTUCANWishboneWrapper
 
 # CRG ----------------------------------------------------------------------------------------------
 
@@ -145,6 +147,14 @@ class BaseSoC(SoCCore):
             platform.add_extension(digilent_arty.raw_pmod_io("pmoda"))
             self.submodules.gpio = GPIOTristate(platform.request("pmoda"))
 
+def can_io():
+    return [(
+        "can",
+        0,
+        Subsignal("rx", Pins("ck_io:ck_io0")),
+        Subsignal("tx", Pins("ck_io:ck_io1")),
+        IOStandard("LVCMOS33"),
+    )]
 # Build --------------------------------------------------------------------------------------------
 
 def main():
@@ -189,6 +199,14 @@ def main():
         with_pmod_gpio = args.with_pmod_gpio,
         **soc_core_argdict(args)
     )
+
+    soc.platform.add_extension(can_io())
+    can_pads = soc.platform.request("can")
+    soc.submodules.can = CTUCAN(soc.platform, can_pads, "vhdl")
+    soc.add_memory_region("can", None, soc.can.wbwrapper.size, type=[])
+    soc.add_wb_slave(soc.bus.regions["can"].origin, soc.can.wbwrapper.bus)
+    soc.add_interrupt("can")
+
     if args.sdcard_adapter == "numato":
         soc.platform.add_extension(digilent_arty._numato_sdcard_pmod_io)
     else:
